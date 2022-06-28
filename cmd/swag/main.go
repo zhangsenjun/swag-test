@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -34,6 +35,7 @@ const (
 	overridesFileFlag     = "overridesFile"
 	parseGoListFlag       = "parseGoList"
 	quietFlag             = "quiet"
+	extandFilesFlag       = "extandFiles"
 )
 
 var initFlags = []cli.Flag{
@@ -131,6 +133,18 @@ var initFlags = []cli.Flag{
 	},
 }
 
+var updateFlags = append(
+	[]cli.Flag{
+		&cli.StringFlag{
+			Name:    extandFilesFlag,
+			Value:   "./docs/common/extands.json",
+			Aliases: []string{"efs"},
+			Usage:   "Use of multiple files `|` Split. Defaults path is: ./docs/common/extands.json ",
+		},
+	},
+	initFlags...,
+)
+
 func initAction(ctx *cli.Context) error {
 	strategy := ctx.String(propertyStrategyFlag)
 
@@ -176,10 +190,13 @@ func updateAction(ctx *cli.Context) error {
 	if err != nil {
 		log.Println("Failed to execute `swag init`, update failed")
 	}
-	err = updateData(ctx.String(outputFlag))
+	log.Println("swag init executed successfully")
+	log.Println(ctx.String(extandFilesFlag))
+	err = updateData(ctx.String(outputFlag), ctx.String(extandFilesFlag))
 	if err != nil {
 		return err
 	}
+
 	log.Println("update success")
 	return nil
 }
@@ -201,7 +218,7 @@ func main() {
 			Aliases: []string{"u"},
 			Usage:   "update docs",
 			Action:  updateAction,
-			Flags:   initFlags,
+			Flags:   updateFlags,
 		},
 		{
 			Name:    "fmt",
@@ -244,11 +261,10 @@ func main() {
 	}
 }
 
-func updateData(docsDirPath string) error {
+func updateData(docsDirPath string, extandFilesPath string) error {
 	const tempPlaceholder string = `"schemes": "Placeholder",`
 	const illegalStr string = `"schemes": {{ marshal .Schemes }},`
 	var filePath string = docsDirPath + "/docs.go"
-	var extandsFilePath string = docsDirPath + "/common/extands.json"
 
 	docsFileBytes, err := ioutil.ReadFile(filePath)
 	docsFileStr := string(docsFileBytes)
@@ -267,13 +283,19 @@ func updateData(docsDirPath string) error {
 	templateMap := make(map[string]interface{})
 	err = json.Unmarshal([]byte(jsonTempStr), &templateMap)
 	if err != nil {
-		log.Println("json unmarshal fail")
+		log.Println("json unmarshal fail, check constants in docs.go")
 		return err
 	}
-	replaceType(templateMap["paths"].(map[string]interface{}))
-	err = appendDefinitions(templateMap["definitions"].(map[string]interface{}), extandsFilePath)
+	definitionsMap := templateMap["definitions"].(map[string]interface{})
+	for _, extandsFilePath := range strings.Split(extandFilesPath, "|") {
+		err = appendDefinitions(definitionsMap, extandsFilePath)
+		if err != nil {
+			log.Println("append definitions fail, the file name: " + extandsFilePath)
+			return err
+		}
+	}
+	err = replaceType(templateMap["paths"].(map[string]interface{}), definitionsMap)
 	if err != nil {
-		log.Println("append definitions fail")
 		return err
 	}
 
@@ -294,7 +316,7 @@ func updateData(docsDirPath string) error {
 	return nil
 }
 
-func replaceType(pathsMap map[string]interface{}) {
+func replaceType(pathsMap map[string]interface{}, definitionsMap map[string]interface{}) error {
 	const typeRefPrefix = "#/definitions/"
 	for path, pathMap := range pathsMap {
 		postMap := pathMap.(map[string]interface{})["post"]
@@ -306,7 +328,11 @@ func replaceType(pathsMap map[string]interface{}) {
 				descStrs := strings.Split(description, "-")
 				if len(descStrs) < 3 {
 					log.Println("The interface third-lib data structure description format is incorrect.\nThe error interface is " + path)
-					continue
+					return errors.New("update fail")
+				}
+				if _, exit := definitionsMap[descStrs[2]]; !exit {
+					log.Println(descStrs[2] + " type not exist. Please add type to the extands.json")
+					return errors.New("update fail")
 				}
 				replaceType := typeRefPrefix + descStrs[2]
 				schema["$ref"] = replaceType
@@ -314,6 +340,7 @@ func replaceType(pathsMap map[string]interface{}) {
 			}
 		}
 	}
+	return nil
 }
 
 func appendDefinitions(definitionsMap map[string]interface{}, extandsFilePath string) error {
