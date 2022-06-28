@@ -139,7 +139,7 @@ var updateFlags = append(
 			Name:    extandFilesFlag,
 			Value:   "./docs/common/extands.json",
 			Aliases: []string{"efs"},
-			Usage:   "Use of multiple files `|` Split. Defaults path is: ./docs/common/extands.json ",
+			Usage:   "Use of multiple files `|` Split.",
 		},
 	},
 	initFlags...,
