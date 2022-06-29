@@ -139,7 +139,7 @@ var updateFlags = append(
 			Name:    extandFilesFlag,
 			Value:   "./docs/common/extands.json",
 			Aliases: []string{"efs"},
-			Usage:   "Use of multiple files `|` Split.",
+			Usage:   "Use of multiple files `,` Split.",
 		},
 	},
 	initFlags...,
@@ -287,7 +287,7 @@ func updateData(docsDirPath string, extandFilesPath string) error {
 		return err
 	}
 	definitionsMap := templateMap["definitions"].(map[string]interface{})
-	for _, extandsFilePath := range strings.Split(extandFilesPath, "|") {
+	for _, extandsFilePath := range strings.Split(extandFilesPath, ",") {
 		err = appendDefinitions(definitionsMap, extandsFilePath)
 		if err != nil {
 			log.Println("append definitions fail, the file name: " + extandsFilePath)
